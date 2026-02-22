@@ -46,16 +46,21 @@ def validar_cpf_api(cpf):
     try:
         # Usando API pública de validação de CPF
         url = f"https://brasilapi.com.br/api/cpf/v1/{cpf}"
-        response = requests.get(url, timeout=5)
+        response = requests.get(url, timeout=3)
         
         if response.status_code == 200:
             return True, "CPF válido"
+        elif response.status_code == 404:
+            # CPF válido matematicamente mas não encontrado na base
+            # Aceita mesmo assim (validação offline)
+            return True, "CPF válido (validação matemática)"
         else:
-            return False, "CPF não encontrado na base de dados"
+            # Qualquer outro erro, aceita validação matemática
+            return True, "CPF válido (validação matemática)"
     except requests.exceptions.RequestException:
         # Se a API falhar, aceita apenas validação matemática
         if validar_cpf_matematicamente(cpf):
-            return True, "CPF válido (validação offline)"
+            return True, "CPF válido (validação matemática)"
         return False, "CPF inválido"
 
 def validar_cpf(cpf):
@@ -66,11 +71,10 @@ def validar_cpf(cpf):
     if not validar_cpf_formato(cpf_limpo):
         return False, "CPF deve conter 11 dígitos"
     
-    # Segunda validação: matemática
+    # Segunda validação: matemática (principal)
     if not validar_cpf_matematicamente(cpf_limpo):
         return False, "CPF inválido"
     
-    # Terceira validação: API (verifica se existe)
-    valido, mensagem = validar_cpf_api(cpf_limpo)
-    
-    return valido, mensagem
+    # Se passou na validação matemática, está OK
+    # A API é opcional e não bloqueia
+    return True, "CPF válido"

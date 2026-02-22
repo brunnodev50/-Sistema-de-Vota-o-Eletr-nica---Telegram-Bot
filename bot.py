@@ -21,6 +21,16 @@ user_states = {}
 
 # ==================== FUNÇÕES AUXILIARES ====================
 
+def escape_markdown(text):
+    """Escapa caracteres especiais do Markdown"""
+    if text is None:
+        return ""
+    text = str(text)
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for char in special_chars:
+        text = text.replace(char, '\\' + char)
+    return text
+
 def verificar_senha(message, callback_sucesso, *args):
     """Verifica se a senha está correta"""
     bot.send_message(message.chat.id, "🔒 Digite a senha de administrador:")
@@ -33,16 +43,6 @@ def processar_senha(message, callback_sucesso, args):
     else:
         bot.send_message(message.chat.id, "❌ Senha incorreta!")
 
-def criar_menu_principal():
-    """Cria o menu principal"""
-    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    markup.add(
-        types.KeyboardButton("📊 Ver Resultados"),
-        types.KeyboardButton("🗳️ Votar"),
-        types.KeyboardButton("ℹ️ Ajuda")
-    )
-    return markup
-
 # ==================== COMANDO /START ====================
 
 @bot.message_handler(commands=['start'])
@@ -51,39 +51,22 @@ def start(message):
     ano_atual = db.get_ano_atual()
     votacao_ativa = db.votacao_ativa()
     
-    mensagem = f"🗳️ *Bem-vindo ao Sistema de Votação Eletrônica!*\n\n"
-    mensagem += f"📅 Ano da eleição: *{ano_atual}*\n"
+    mensagem = f"🗳️ BEM-VINDO AO SISTEMA DE VOTAÇÃO ELETRÔNICA!\n\n"
+    mensagem += f"📅 Ano da eleição: {ano_atual}\n"
     mensagem += f"Status: {'✅ Votação ABERTA' if votacao_ativa else '🔒 Votação ENCERRADA'}\n\n"
     
     if votacao_ativa:
-        mensagem += "Para votar, digite seu nome completo ou use o botão abaixo."
-        markup = criar_menu_principal()
+        mensagem += "Para votar, use o comando /votar\n"
+        mensagem += "Para ver os resultados, use /resultados\n"
+        mensagem += "Para ajuda, use /ajuda"
     else:
-        mensagem += "A votação está encerrada. Você pode ver os resultados."
-        markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-        markup.add(types.KeyboardButton("📊 Ver Resultados"))
+        mensagem += "A votação está encerrada. Você pode ver os resultados usando /resultados"
     
-    bot.send_message(message.chat.id, mensagem, parse_mode='Markdown', reply_markup=markup)
-    
-    if votacao_ativa:
-        bot.register_next_step_handler(message, processar_resposta_menu)
-
-def processar_resposta_menu(message):
-    """Processa a resposta do menu principal"""
-    texto = message.text
-    
-    if texto == "🗳️ Votar":
-        iniciar_votacao(message)
-    elif texto == "📊 Ver Resultados":
-        mostrar_resultados(message)
-    elif texto == "ℹ️ Ajuda":
-        mostrar_ajuda(message)
-    else:
-        # Se não for um botão, assume que é o nome para votação
-        solicitar_nome(message)
+    bot.send_message(message.chat.id, mensagem, reply_markup=types.ReplyKeyboardRemove())
 
 # ==================== PROCESSO DE VOTAÇÃO ====================
 
+@bot.message_handler(commands=['votar'])
 def iniciar_votacao(message):
     """Inicia o processo de votação"""
     if not db.votacao_ativa():
@@ -151,8 +134,7 @@ def solicitar_cpf(message, nome):
     
     bot.send_message(
         message.chat.id, 
-        "🗳️ *Escolha seu candidato:*\n\nClique em um dos botões abaixo:", 
-        parse_mode='Markdown',
+        "🗳️ ESCOLHA SEU CANDIDATO\n\nClique em um dos botões abaixo:", 
         reply_markup=markup
     )
     
@@ -188,16 +170,16 @@ def processar_voto(message, cpf, nome_eleitor, candidatos):
             bot.send_photo(message.chat.id, foto)
     
     # Cria mensagem de confirmação
-    texto_confirmacao = f"✅ *Confirme seu voto:*\n\n"
-    texto_confirmacao += f"📋 Candidato: *{nome_cand}*\n"
-    texto_confirmacao += f"🔢 Número: *{numero}*\n"
+    texto_confirmacao = f"✅ CONFIRME SEU VOTO\n\n"
+    texto_confirmacao += f"📋 Candidato: {nome_cand}\n"
+    texto_confirmacao += f"🔢 Número: {numero}\n"
     if partido_sigla:
-        texto_confirmacao += f"🏛️ Partido: *{partido_nome} ({partido_sigla})*\n"
+        texto_confirmacao += f"🏛️ Partido: {partido_nome} ({partido_sigla})\n"
     
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     markup.add("✅ Confirmar", "❌ Cancelar")
     
-    bot.send_message(message.chat.id, texto_confirmacao, parse_mode='Markdown', reply_markup=markup)
+    bot.send_message(message.chat.id, texto_confirmacao, reply_markup=markup)
     bot.register_next_step_handler(message, confirmar_voto, cpf, nome_eleitor, candidato_id)
 
 def confirmar_voto(message, cpf, nome_eleitor, candidato_id):
@@ -209,8 +191,7 @@ def confirmar_voto(message, cpf, nome_eleitor, candidato_id):
         if sucesso:
             bot.send_message(
                 message.chat.id, 
-                "✅ *Voto registrado com sucesso!*\n\nObrigado por participar!",
-                parse_mode='Markdown',
+                "✅ VOTO REGISTRADO COM SUCESSO!\n\nObrigado por participar!",
                 reply_markup=types.ReplyKeyboardRemove()
             )
         else:
@@ -255,11 +236,11 @@ def listar_partidos(message):
         bot.send_message(message.chat.id, "❌ Nenhum partido cadastrado.")
         return
     
-    mensagem = "🏛️ *Partidos Cadastrados:*\n\n"
+    mensagem = "🏛️ PARTIDOS CADASTRADOS\n\n"
     for partido_id, nome, sigla in partidos:
-        mensagem += f"ID: {partido_id} | *{sigla}* - {nome}\n"
+        mensagem += f"ID: {partido_id} | {sigla} - {nome}\n"
     
-    bot.send_message(message.chat.id, mensagem, parse_mode='Markdown')
+    bot.send_message(message.chat.id, mensagem)
 
 # ==================== GERENCIAMENTO DE CANDIDATOS ====================
 
@@ -306,7 +287,7 @@ def inserir_presidente_pedir_partido(message):
             )
             return
         
-        mensagem = "🏛️ *Escolha o partido:*\n\n"
+        mensagem = "🏛️ Escolha o partido:\n\n"
         markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         
         for partido_id, nome, sigla in partidos:
@@ -315,7 +296,7 @@ def inserir_presidente_pedir_partido(message):
         
         markup.add("Sem partido")
         
-        bot.send_message(message.chat.id, mensagem, parse_mode='Markdown', reply_markup=markup)
+        bot.send_message(message.chat.id, mensagem, reply_markup=markup)
         bot.register_next_step_handler(message, inserir_presidente_pedir_foto)
         
     except ValueError:
@@ -396,7 +377,7 @@ def editar_presidente_listar(message):
         bot.send_message(message.chat.id, "❌ Nenhum candidato cadastrado para este ano.")
         return
     
-    mensagem = f"📋 *Candidatos de {ano_atual}:*\n\n"
+    mensagem = f"📋 Candidatos de {ano_atual}:\n\n"
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     
     for candidato in candidatos:
@@ -407,7 +388,7 @@ def editar_presidente_listar(message):
         mensagem += "\n"
         markup.add(f"{candidato_id}")
     
-    bot.send_message(message.chat.id, mensagem, parse_mode='Markdown', reply_markup=markup)
+    bot.send_message(message.chat.id, mensagem, reply_markup=markup)
     bot.send_message(message.chat.id, "🔢 Digite o ID do candidato que deseja editar:")
     bot.register_next_step_handler(message, editar_presidente_escolher_campo)
 
@@ -455,7 +436,7 @@ def editar_presidente_processar(message):
         bot.register_next_step_handler(message, editar_presidente_finalizar)
     elif campo == "Partido":
         partidos = db.listar_partidos()
-        mensagem = "🏛️ *Escolha o novo partido:*\n\n"
+        mensagem = "🏛️ Escolha o novo partido:\n\n"
         markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
         
         for partido_id, nome, sigla in partidos:
@@ -464,7 +445,7 @@ def editar_presidente_processar(message):
         
         markup.add("Sem partido")
         
-        bot.send_message(message.chat.id, mensagem, parse_mode='Markdown', reply_markup=markup)
+        bot.send_message(message.chat.id, mensagem, reply_markup=markup)
         bot.register_next_step_handler(message, editar_presidente_finalizar)
     elif campo == "Foto":
         bot.send_message(message.chat.id, "📸 Envie a nova foto:", reply_markup=types.ReplyKeyboardRemove())
@@ -542,7 +523,7 @@ def deletar_presidente_listar(message):
         bot.send_message(message.chat.id, "❌ Nenhum candidato cadastrado.")
         return
     
-    mensagem = f"📋 *Candidatos de {ano_atual}:*\n\n"
+    mensagem = f"📋 Candidatos de {ano_atual}:\n\n"
     markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
     
     for candidato in candidatos:
@@ -550,7 +531,7 @@ def deletar_presidente_listar(message):
         mensagem += f"ID: {candidato_id} | {numero} - {nome}\n"
         markup.add(f"{candidato_id}")
     
-    bot.send_message(message.chat.id, mensagem, parse_mode='Markdown', reply_markup=markup)
+    bot.send_message(message.chat.id, mensagem, reply_markup=markup)
     bot.send_message(message.chat.id, "🔢 Digite o ID do candidato que deseja deletar:")
     bot.register_next_step_handler(message, deletar_presidente_finalizar)
 
@@ -583,16 +564,17 @@ def lista_presidente(message):
         bot.send_message(message.chat.id, f"❌ Nenhum candidato cadastrado para {ano_atual}.")
         return
     
-    mensagem = f"📋 *Candidatos de {ano_atual}:*\n\n"
+    mensagem = f"📋 CANDIDATOS DE {ano_atual}\n\n"
     
     for candidato in candidatos:
         candidato_id, nome, numero, foto_path, partido_nome, partido_sigla, ano = candidato
-        mensagem += f"🔢 *{numero}* - {nome}"
+        
+        mensagem += f"🔢 {numero} - {nome}"
         if partido_sigla:
             mensagem += f"\n   🏛️ {partido_nome} ({partido_sigla})"
         mensagem += "\n\n"
     
-    bot.send_message(message.chat.id, mensagem, parse_mode='Markdown')
+    bot.send_message(message.chat.id, mensagem)
 
 # ==================== CONTROLE DA VOTAÇÃO ====================
 
@@ -672,6 +654,7 @@ def zerar_votos_processar(message):
 
 # ==================== RESULTADOS ====================
 
+@bot.message_handler(commands=['resultados'])
 def mostrar_resultados(message, ano=None):
     """Mostra os resultados da votação"""
     if ano is None:
@@ -684,23 +667,24 @@ def mostrar_resultados(message, ano=None):
         bot.send_message(message.chat.id, f"❌ Nenhum voto registrado para {ano}.")
         return
     
-    mensagem = f"📊 *Resultados da Eleição {ano}:*\n\n"
+    mensagem = f"📊 RESULTADOS DA ELEIÇÃO {ano}\n\n"
     
     vencedor = resultados[0] if resultados else None
     
     for nome, numero, sigla, votos in resultados:
         porcentagem = (votos / total_votos) * 100 if total_votos > 0 else 0
-        mensagem += f"🔢 *{numero}* - {nome}"
+        
+        mensagem += f"🔢 {numero} - {nome}"
         if sigla:
             mensagem += f" ({sigla})"
         mensagem += f"\n   📊 {votos} votos ({porcentagem:.2f}%)\n\n"
     
-    mensagem += f"📈 *Total de votos:* {total_votos}\n"
+    mensagem += f"📈 Total de votos: {total_votos}\n"
     
     if vencedor and vencedor[3] > 0:
-        mensagem += f"🏆 *Vencedor:* {vencedor[0]}\n"
+        mensagem += f"🏆 Vencedor: {vencedor[0]}\n"
     
-    bot.send_message(message.chat.id, mensagem, parse_mode='Markdown')
+    bot.send_message(message.chat.id, mensagem)
 
 @bot.message_handler(commands=['resultados_anteriores'])
 def resultados_anteriores_inicio(message):
@@ -718,8 +702,7 @@ def resultados_anteriores_inicio(message):
     
     bot.send_message(
         message.chat.id, 
-        "📅 *Eleições Anteriores:*\n\nEscolha um ano:",
-        parse_mode='Markdown',
+        "📅 Eleições Anteriores:\n\nEscolha um ano:",
         reply_markup=markup
     )
     bot.register_next_step_handler(message, resultados_anteriores_mostrar)
@@ -742,36 +725,38 @@ def resultados_anteriores_mostrar(message):
 def mostrar_ajuda(message):
     """Mostra a ajuda do sistema"""
     mensagem = """
-📚 *COMANDOS DISPONÍVEIS:*
+📚 COMANDOS DISPONÍVEIS
 
-👥 *Para Eleitores:*
+👥 Para Eleitores:
 /start - Iniciar o bot
+/votar - Iniciar votação
+/resultados - Ver resultados
 /ajuda - Mostrar esta ajuda
 
-🔧 *Para Administradores:*
+🔧 Para Administradores:
 
-*Partidos:*
+Partidos:
 /cadastrar_partidos - Cadastrar partido
 /lista_partidos - Listar partidos
 
-*Candidatos:*
+Candidatos:
 /inserir_presidente - Cadastrar candidato
 /editar_presidente - Editar candidato
 /deletar_presidente - Deletar candidato
 /lista_presidente - Listar candidatos
 
-*Votação:*
+Votação:
 /definir_ano - Definir ano da eleição
 /encerrar - Encerrar votação
 /reabrir - Reabrir votação
 /zerar_votos - Zerar votos do ano atual
 
-*Resultados:*
+Resultados:
 /resultados_anteriores - Ver eleições anteriores
 
 ⚠️ Todos os comandos administrativos requerem senha.
     """
-    bot.send_message(message.chat.id, mensagem, parse_mode='Markdown')
+    bot.send_message(message.chat.id, mensagem)
 
 # ==================== INICIA O BOT ====================
 
